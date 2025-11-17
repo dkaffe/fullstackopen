@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import axios from "axios";
+import personsService from "./service/persons";
 
 // Filter component
 const Filter = ({ filterName, handleFilterChange }) => {
@@ -35,12 +35,15 @@ const PersonForm = ({
 };
 
 // List of persons in the phonebook
-const Persons = ({ personsToShow }) => {
+const Persons = ({ personsToShow, handleDelete }) => {
   return (
     <ul>
       {personsToShow.map((person) => (
         <li key={person.id}>
           {person.name} {person.number}
+          <button onClick={() => handleDelete(person.id, person.name)}>
+            delete
+          </button>
         </li>
       ))}
     </ul>
@@ -55,8 +58,8 @@ const App = () => {
 
   // Fetch database entries
   useEffect(() => {
-    axios.get("http://localhost:3001/persons").then((response) => {
-      setPersons(response.data);
+    personsService.getAll().then((initialPersons) => {
+      setPersons(initialPersons);
     });
   }, []);
 
@@ -83,24 +86,74 @@ const App = () => {
 
     if (trimmedName === "" || trimmedNumber === "") return;
 
-    const nameAlreadyExists = persons.some(
+    const existingPerson = persons.find(
       (person) => person.name === trimmedName
     );
 
-    if (nameAlreadyExists) {
-      alert(`${trimmedName} is already in the phonebook!`);
+    // If person already exists → confirm & update number
+    if (existingPerson) {
+      const ok = window.confirm(
+        `${trimmedName} is already added to phonebook, replace the old number with a new one?`
+      );
+      if (!ok) return;
+
+      const updatedPerson = { ...existingPerson, number: trimmedNumber };
+
+      personsService
+        .update(existingPerson.id, updatedPerson)
+        .then((returnedPerson) => {
+          setPersons(
+            persons.map((person) =>
+              person.id !== existingPerson.id ? person : returnedPerson
+            )
+          );
+          setNewName("");
+          setNewNumber("");
+        })
+        .catch((error) => {
+          alert(
+            `Information of ${trimmedName} has already been removed from the server`
+          );
+          setPersons(persons.filter((p) => p.id !== existingPerson.id));
+        });
+
       return;
     }
 
+    // Otherwise → create a brand new person
     const personObject = {
       name: trimmedName,
       number: trimmedNumber,
-      id: persons.length + 1,
     };
 
-    setPersons(persons.concat(personObject));
-    setNewName("");
-    setNewNumber("");
+    personsService.create(personObject).then((returnedPerson) => {
+      setPersons(persons.concat(returnedPerson));
+      setNewName("");
+      setNewNumber("");
+    });
+  };
+
+  const handleDelete = (id, name) => {
+    const ok = window.confirm(`Delete ${name}?`);
+    if (!ok) return;
+
+    personsService
+      .remove(id)
+      .then(() => {
+        setPersons(
+          persons.filter((person) => {
+            return person.id !== id;
+          })
+        );
+      })
+      .catch((error) => {
+        alert(`${name} has already been removed from the server`);
+        setPersons(
+          persons.filter((person) => {
+            person.id !== id;
+          })
+        );
+      });
   };
 
   const personsToShow =
@@ -128,7 +181,7 @@ const App = () => {
 
       <h3>Numbers</h3>
 
-      <Persons personsToShow={personsToShow} />
+      <Persons personsToShow={personsToShow} handleDelete={handleDelete} />
     </div>
   );
 };
