@@ -1,8 +1,18 @@
 const express = require('express')
+const morgan = require('morgan')
+
 const app = express()
 
 // Middleware to parse JSON bodies
 app.use(express.json())
+
+// Custom Morgan token for request body
+morgan.token('body', (req) => {
+    return Object.keys(req.body || {}).length ? JSON.stringify(req.body) : ''
+})
+
+// Use Morgan with custom format // JSON.stringify method for conditional usage (?)
+app.use(morgan(':method :url :status :res[content-length] - :response-time ms :body'))
 
 // Hardcoded data (phonebook entries)
 let persons = [
